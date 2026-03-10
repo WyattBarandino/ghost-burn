@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Generated data (full dataset — too large for repo)
+ghost_burn_billing.csv
+
+# Allow the 50-row preview sample
+!sample_billing_50rows.csv
+
+# Generated figures (regenerate via 03_visualizations.py)
+# figures/
+# Uncomment above if you prefer not to commit PNGs
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude launch/internal planning files
+LAUNCH_CHECKLIST.md
+linkedin_teaser.txt
+ghost-burn.html

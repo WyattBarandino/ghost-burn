@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghost Burn — Databricks FinOps Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ── TOKENS ─────────────────────────────────────────────────────────── */
+:root {
+  --burn-primary:   #FF3621;
+  --burn-secondary: #FF6B47;
+  --burn-tertiary:  #FFB347;
+  --burn-bg:        #0D1117;
+  --burn-card:      rgba(255,54,33,0.08);
+  --burn-border:    rgba(255,54,33,0.18);
+  --burn-grid:      rgba(255,255,255,0.06);
+
+  --ext-primary:    #00C7B1;
+  --ext-secondary:  #4A9EFF;
+  --ext-tertiary:   #21A0FF;
+  --ext-bg:         #0D1B23;
+  --ext-card:       rgba(0,199,177,0.08);
+  --ext-border:     rgba(0,199,177,0.18);
+
+  --card-bg:        rgba(255,255,255,0.035);
+  --card-border:    rgba(255,255,255,0.07);
+  --text-primary:   rgba(255,255,255,0.95);
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-dim:       rgba(255,255,255,0.28);
+  --tooltip-bg:     rgba(10,14,20,0.97);
+
+  --p:   var(--burn-primary);
+  --s:   var(--burn-secondary);
+  --t:   var(--burn-tertiary);
+  --bg:  var(--burn-bg);
+  --cb:  var(--burn-card);
+  --cbr: var(--burn-border);
+
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --transition: 0.7s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── RESET ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  transition: background var(--transition);
+  overflow-x: hidden;
+}
+
+/* ── BACKGROUND TEXTURE ─────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(255,54,33,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(255,107,71,0.07) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--transition);
+}
+body.extinguished::before {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,199,177,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(74,158,255,0.07) 0%, transparent 55%);
+}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────── */
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 28px 80px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── HEADER ─────────────────────────────────────────────────────────── */
+header {
+  padding: 48px 0 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.header-left {}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  font-family: var(--mono);
+}
+
+h1 {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--p);
+  transition: color var(--transition);
+}
+h1 span { color: var(--text-primary); }
+
+.subtitle {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  max-width: 520px;
+  line-height: 1.55;
+}
+
+/* ── TOGGLE ─────────────────────────────────────────────────────────── */
+.toggle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.toggle-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 50px;
+  padding: 6px 20px 6px 8px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+.toggle-btn:hover { border-color: var(--p); }
+
+.toggle-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--p);
+  transition: background var(--transition);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.toggle-state-burn  { display: inline; }
+.toggle-state-ext   { display: none; }
+.extinguished .toggle-state-burn { display: none; }
+.extinguished .toggle-state-ext  { display: inline; }
+
+/* ── SECTION LABEL ──────────────────────────────────────────────────── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  margin-bottom: 16px;
+}
+
+/* ── KPI GRID ────────────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 32px;
+}
+@media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 500px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+.kpi-card {
+  background: var(--cb);
+  border: 1px solid var(--cbr);
+  border-radius: var(--radius);
+  padding: 22px 20px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: background var(--transition), border-color var(--transition);
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--p), var(--s));
+  transition: background var(--transition);
+}
+
+.kpi-icon {
+  font-size: 18px;
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  margin-bottom: 6px;
+}
+
+.kpi-value {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--p);
+  line-height: 1;
+  transition: color var(--transition);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  font-family: var(--mono);
+}
+
+.kpi-ghost {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  font-family: var(--mono);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.5s 0.8s, transform 0.5s 0.8s;
+  text-decoration: line-through;
+}
+.extinguished .kpi-ghost { opacity: 1; transform: translateY(0); }
+
+/* ── CHART GRID ──────────────────────────────────────────────────────── */
+.chart-grid-top {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.chart-grid-mid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.chart-grid-bot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+@media (max-width: 960px) {
+  .chart-grid-top, .chart-grid-mid, .chart-grid-bot { grid-template-columns: 1fr; }
+}
+
+.chart-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  position: relative;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.chart-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+.chart-wrap { position: relative; }
+
+/* ── REMEDIATION TABLE ──────────────────────────────────────────────── */
+.remediation-section { margin-bottom: 32px; }
+
+.remed-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.remed-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  border-bottom: 1px solid var(--card-border);
+}
+.remed-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
+.remed-table tr:last-child td { border-bottom: none; }
+.remed-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+.remed-table td.finding-col {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.remed-table td.cost-col {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--p);
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.remed-table td.savings-col {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: #4ADE80;
+  white-space: nowrap;
+}
+.risk-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-family: var(--mono);
+}
+.risk-low    { background: rgba(74,222,128,0.12); color: #4ADE80; }
+.risk-medium { background: rgba(251,191,36,0.12);  color: #FBbf24; }
+
+.effort-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.total-row td {
+  padding-top: 16px;
+  border-top: 1px solid var(--cbr) !important;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ── FOOTER ─────────────────────────────────────────────────────────── */
+footer {
+  border-top: 1px solid var(--card-border);
+  padding-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.footer-left {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  line-height: 1.7;
+}
+
+.footer-links {
+  display: flex;
+  gap: 16px;
+}
+.footer-links a {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-family: var(--mono);
+  transition: color 0.2s;
+}
+.footer-links a:hover { color: var(--p); }
+
+/* ── EXTINGUISHED STATE OVERRIDES ───────────────────────────────────── */
+.extinguished {
+  --p:   var(--ext-primary);
+  --s:   var(--ext-secondary);
+  --t:   var(--ext-tertiary);
+  --bg:  var(--ext-bg);
+  --cb:  var(--ext-card);
+  --cbr: var(--ext-border);
+}
+.extinguished body   { background: var(--ext-bg); }
+.extinguished .toggle-dot { background: var(--ext-primary); }
+
+/* ROI panel — only visible when extinguished */
+.roi-panel {
+  display: none;
+  background: rgba(0,199,177,0.06);
+  border: 1px solid rgba(0,199,177,0.15);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 14px;
+}
+.extinguished .roi-panel { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
+@media (max-width: 700px) { .extinguished .roi-panel { grid-template-columns: 1fr; } }
+
+.roi-stat-label { font-size: 11px; color: var(--text-secondary); font-family: var(--mono); margin-bottom: 4px; }
+.roi-stat-value { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.03em; color: var(--ext-primary); }
+.roi-stat-sub   { font-size: 11px; color: var(--text-dim); font-family: var(--mono); margin-top: 3px; }
+
+/* Chart 6 (ROI timeline) — burn state hidden, ext state shown */
+#chart6-wrap { display: none; }
+.extinguished #chart6-wrap { display: block; }
+#chart5-wrap { display: block; }
+
+/* Animate KPI values on state switch */
+.kpi-value.animating { transition: none; }
+
+/* ── SCROLLBAR ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="eyebrow">Databricks FinOps Audit · Q1 2026 · 8 Workspaces</div>
+      <h1 id="main-title"><span>Ghost</span> Burn</h1>
+      <p class="subtitle" id="main-subtitle">
+        Uncovering invisible DBU spend across Databricks Lakehouse environments.
+        $89,995 audited. $54,635 recoverable with 8 hours of work.
+      </p>
+    </div>
+    <div class="toggle-wrap">
+      <div class="toggle-label">View Mode</div>
+      <button class="toggle-btn" id="toggleBtn" onclick="toggleState()">
+        <div class="toggle-dot" id="toggleDot">🔥</div>
+        <span class="toggle-state-burn">Burn State</span>
+        <span class="toggle-state-ext">Extinguished</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI STRIP -->
+  <div class="section-label">Key Findings — 90-Day Audit Window</div>
+  <div class="kpi-grid" id="kpiGrid">
+
+    <div class="kpi-card">
+      <div class="kpi-icon">💸</div>
+      <div class="kpi-label">Waste Identified</div>
+      <div class="kpi-value" id="kpi1" data-burn="$13,472" data-ext="$1,021">$13,472</div>
+      <div class="kpi-sub" id="kpi1-sub">90-day recoverable</div>
+      <div class="kpi-ghost">was: $13,472 lost</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-label">Annual Projection</div>
+      <div class="kpi-value" id="kpi2" data-burn="$56,580" data-ext="$54,635">$56,580</div>
+      <div class="kpi-sub" id="kpi2-sub">at current trajectory</div>
+      <div class="kpi-ghost">was: $56,580/yr</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-icon">🎯</div>
+      <div class="kpi-label">Waste Rate</div>
+      <div class="kpi-value" id="kpi3" data-burn="15.5%" data-ext="1.1%">15.5%</div>
+      <div class="kpi-sub" id="kpi3-sub">of total platform spend</div>
+      <div class="kpi-ghost">was: 15.5%</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-icon">⚡</div>
+      <div class="kpi-label">ROI</div>
+      <div class="kpi-value" id="kpi4" data-burn="8 hrs" data-ext="$54,635">8 hrs</div>
+      <div class="kpi-sub" id="kpi4-sub">implementation effort</div>
+      <div class="kpi-ghost">1 day → $54,635/yr</div>
+    </div>
+
+  </div>
+
+  <!-- ROI PANEL (extinguished only) -->
+  <div class="roi-panel">
+    <div>
+      <div class="roi-stat-label">Net Annual Savings</div>
+      <div class="roi-stat-value">$54,635</div>
+      <div class="roi-stat-sub">after 8 hrs implementation</div>
+    </div>
+    <div>
+      <div class="roi-stat-label">Scale — 50 Workspaces</div>
+      <div class="roi-stat-value">$341K</div>
+      <div class="roi-stat-sub">preventable annual spend</div>
+    </div>
+    <div>
+      <div class="roi-stat-label">Payback Period</div>
+      <div class="roi-stat-value">&lt; 1 day</div>
+      <div class="roi-stat-sub">policies self-enforce after deploy</div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 1 -->
+  <div class="chart-grid-top">
+    <div class="chart-card">
+      <div class="chart-title">Burn Trend — Daily Platform Spend</div>
+      <div class="chart-desc">90-day spend trajectory with anomaly window annotations. Extinguished view shows projected post-remediation baseline.</div>
+      <div class="chart-wrap"><canvas id="chart1" height="200"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">SKU Cost Breakdown</div>
+      <div class="chart-desc">DBU spend distribution across compute categories. AI/ML represents 53.1% of total platform cost.</div>
+      <div class="chart-wrap"><canvas id="chart2" height="200"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 2 -->
+  <div class="chart-grid-mid">
+    <div class="chart-card">
+      <div class="chart-title">GPU Utilization vs. Cost</div>
+      <div class="chart-desc">Bubble size = 90-day cost. ws-retail-forecast-002 runs p4d.24xlarge at 27.9% utilization — primary overprovisioning target.</div>
+      <div class="chart-wrap"><canvas id="chart3" height="220"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Workspace Risk Matrix</div>
+      <div class="chart-desc">Spend vs. waste concentration per workspace. Upper-right quadrant = highest remediation priority.</div>
+      <div class="chart-wrap"><canvas id="chart4" height="220"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 3 -->
+  <div class="chart-grid-bot">
+    <div class="chart-card" id="chart5-wrap">
+      <div class="chart-title">DLT Pipeline Cost — CONTINUOUS Mode Burn</div>
+      <div class="chart-desc">pipe-risk-factor-etl runs 24/7 in CONTINUOUS mode. 67.4% idle rate — data only arrives during business hours.</div>
+      <div class="chart-wrap"><canvas id="chart5" height="200"></canvas></div>
+    </div>
+    <div class="chart-card" id="chart6-wrap">
+      <div class="chart-title">Remediation ROI Timeline</div>
+      <div class="chart-desc">Cumulative savings unlocked by implementation week. Full payback achieved by end of Week 3.</div>
+      <div class="chart-wrap"><canvas id="chart6" height="200"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Anomaly Classification Summary</div>
+      <div class="chart-desc">5 anomaly types, 5 fixes. Each bar represents 90-day recoverable cost per finding.</div>
+      <div class="chart-wrap"><canvas id="chart7" height="200"></canvas></div>
+    </div>
+  </div>
+
+  <!-- REMEDIATION TABLE -->
+  <div class="remediation-section">
+    <div class="section-label">Remediation Playbook — Implementation Roadmap</div>
+    <div class="chart-card" style="padding:0 0 4px;">
+      <table class="remed-table">
+        <thead>
+          <tr>
+            <th>Finding</th>
+            <th>Workspace</th>
+            <th>90-Day Cost</th>
+            <th>Annual Savings</th>
+            <th>Fix</th>
+            <th>Effort</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="finding-col">Zombie Cluster</td>
+            <td>ws-zombie-008</td>
+            <td class="cost-col">$5,007</td>
+            <td class="savings-col">$19,289</td>
+            <td>Compute Policy + Nightly Sweep</td>
+            <td class="effort-badge">30 min</td>
+            <td><span class="risk-badge risk-low">Low</span></td>
+          </tr>
+          <tr>
+            <td class="finding-col">Serverless SQL Spike</td>
+            <td>ws-prod-bi-004</td>
+            <td class="cost-col">$1,214</td>
+            <td class="savings-col">$4,183</td>
+            <td>Warehouse Budget Policy</td>
+            <td class="effort-badge">1 hr</td>
+            <td><span class="risk-badge risk-low">Low</span></td>
+          </tr>
+          <tr>
+            <td class="finding-col">GPU Overprovisioning</td>
+            <td>ws-retail-forecast-002</td>
+            <td class="cost-col">$11,759</td>
+            <td class="savings-col">$23,845</td>
+            <td>Right-size p4d → g5.12xlarge</td>
+            <td class="effort-badge">2 hrs</td>
+            <td><span class="risk-badge risk-medium">Medium</span></td>
+          </tr>
+          <tr>
+            <td class="finding-col">Weekend Dev Waste</td>
+            <td>ws-sandbox + ws-health</td>
+            <td class="cost-col">$946</td>
+            <td class="savings-col">$3,645</td>
+            <td>SDK Lifecycle Notebook</td>
+            <td class="effort-badge">45 min</td>
+            <td><span class="risk-badge risk-low">Low</span></td>
+          </tr>
+          <tr>
+            <td class="finding-col">Runaway DLT Pipeline</td>
+            <td>ws-fsi-trading-001</td>
+            <td class="cost-col">$1,510</td>
+            <td class="savings-col">$3,673</td>
+            <td>CONTINUOUS → TRIGGERED</td>
+            <td class="effort-badge">1 hr</td>
+            <td><span class="risk-badge risk-low">Low</span></td>
+          </tr>
+          <tr class="total-row">
+            <td class="finding-col">Total</td>
+            <td>8 workspaces</td>
+            <td class="cost-col">$20,435</td>
+            <td class="savings-col">$54,635</td>
+            <td>5 remediations, all copy-paste ready</td>
+            <td class="effort-badge">~8 hrs</td>
+            <td><span class="risk-badge risk-low">Low</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-left">
+      Ghost Burn v2 — Wyatt Barandino · Data Analyst<br>
+      All data is 100% synthetic. Modeled from public Databricks documentation.<br>
+      Not affiliated with or endorsed by Databricks, Inc.
+    </div>
+    <div class="footer-links">
+      <a href="https://linkedin.com/in/wyattbarandino" target="_blank">LinkedIn</a>
+      <a href="DATABRICKS_MIGRATION.md" target="_blank">Migration Guide</a>
+      <a href="README.md" target="_blank">README</a>
+    </div>
+  </footer>
+
+</div><!-- /wrap -->
+
+<script>
+/* ── DATA ──────────────────────────────────────────────────────────────── */
+const DAILY = [{"date":"2026-01-01","cost":1216.1428},{"date":"2026-01-02","cost":984.4522},{"date":"2026-01-03","cost":901.3095},{"date":"2026-01-04","cost":1110.5258},{"date":"2026-01-05","cost":877.6517},{"date":"2026-01-06","cost":822.2674},{"date":"2026-01-07","cost":897.2741},{"date":"2026-01-08","cost":894.0073},{"date":"2026-01-09","cost":927.2074},{"date":"2026-01-10","cost":927.3491},{"date":"2026-01-11","cost":1145.7536},{"date":"2026-01-12","cost":893.9697},{"date":"2026-01-13","cost":867.7753},{"date":"2026-01-14","cost":1015.5461},{"date":"2026-01-15","cost":1083.7272},{"date":"2026-01-16","cost":877.2774},{"date":"2026-01-17","cost":985.6063},{"date":"2026-01-18","cost":1008.3805},{"date":"2026-01-19","cost":963.1568},{"date":"2026-01-20","cost":956.7898},{"date":"2026-01-21","cost":883.2521},{"date":"2026-01-22","cost":1044.0218},{"date":"2026-01-23","cost":1046.8498},{"date":"2026-01-24","cost":1063.2975},{"date":"2026-01-25","cost":1075.9649},{"date":"2026-01-26","cost":954.3289},{"date":"2026-01-27","cost":872.7461},{"date":"2026-01-28","cost":896.8773},{"date":"2026-01-29","cost":981.2543},{"date":"2026-01-30","cost":1054.4118},{"date":"2026-01-31","cost":1022.3485},{"date":"2026-02-01","cost":944.5127},{"date":"2026-02-02","cost":963.2984},{"date":"2026-02-03","cost":1074.3612},{"date":"2026-02-04","cost":988.5234},{"date":"2026-02-05","cost":921.6741},{"date":"2026-02-06","cost":893.4521},{"date":"2026-02-07","cost":978.3214},{"date":"2026-02-08","cost":1012.4563},{"date":"2026-02-09","cost":987.6234},{"date":"2026-02-10","cost":1847.3421},{"date":"2026-02-11","cost":2134.5678},{"date":"2026-02-12","cost":1923.4512},{"date":"2026-02-13","cost":1654.3219},{"date":"2026-02-14","cost":1012.5634},{"date":"2026-02-15","cost":934.2341},{"date":"2026-02-16","cost":967.8912},{"date":"2026-02-17","cost":1023.5671},{"date":"2026-02-18","cost":998.3214},{"date":"2026-02-19","cost":912.4563},{"date":"2026-02-20","cost":887.6234},{"date":"2026-02-21","cost":934.2341},{"date":"2026-02-22","cost":978.5671},{"date":"2026-02-23","cost":1045.3214},{"date":"2026-02-24","cost":1067.8912},{"date":"2026-02-25","cost":956.3214},{"date":"2026-02-26","cost":912.5671},{"date":"2026-02-27","cost":978.3214},{"date":"2026-02-28","cost":1034.5678},{"date":"2026-03-01","cost":989.2341},{"date":"2026-03-02","cost":1023.5671},{"date":"2026-03-03","cost":912.8912},{"date":"2026-03-04","cost":956.3214},{"date":"2026-03-05","cost":1078.5671},{"date":"2026-03-06","cost":1034.3214},{"date":"2026-03-07","cost":1123.8912},{"date":"2026-03-08","cost":989.5671},{"date":"2026-03-09","cost":1045.3214},{"date":"2026-03-10","cost":978.8912},{"date":"2026-03-11","cost":1012.5671},{"date":"2026-03-12","cost":934.3214},{"date":"2026-03-13","cost":1067.8912},{"date":"2026-03-14","cost":1023.5671},{"date":"2026-03-15","cost":956.3214},{"date":"2026-03-16","cost":912.8912},{"date":"2026-03-17","cost":989.5671},{"date":"2026-03-18","cost":1045.3214},{"date":"2026-03-19","cost":1078.8912},{"date":"2026-03-20","cost":1034.5671},{"date":"2026-03-21","cost":978.3214},{"date":"2026-03-22","cost":1012.8912},{"date":"2026-03-23","cost":956.5671},{"date":"2026-03-24","cost":1067.3214},{"date":"2026-03-25","cost":934.8912},{"date":"2026-03-26","cost":989.5671},{"date":"2026-03-27","cost":1023.3214},{"date":"2026-03-28","cost":1078.8912},{"date":"2026-03-29","cost":948.107},{"date":"2026-03-30","cost":1216.1529},{"date":"2026-03-31","cost":1193.109}];
+
+const SKU = {"AI/ML":47768.83,"Interactive":19681.13,"Platform":1404.88,"Production":21140.45};
+
+const GPU_SCATTER = [
+  {ws:"ws-ai-serving-006",   cost:2504.71,  util:62.8},
+  {ws:"ws-fsi-trading-001",  cost:3450.92,  util:60.47},
+  {ws:"ws-health-analytics", cost:867.40,   util:58.67},
+  {ws:"ws-prod-bi-004",      cost:1402.62,  util:64.32},
+  {ws:"ws-retail-forecast",  cost:11759.14, util:27.89},
+  {ws:"ws-sandbox-ds-005",   cost:540.55,   util:62.91},
+  {ws:"ws-staging-007",      cost:791.80,   util:62.41},
+  {ws:"ws-zombie-008",       cost:602.26,   util:62.87},
+];
+
+const WS_COSTS = {
+  "ws-ai-serving-006":       {cost:12795.41, waste:0},
+  "ws-fsi-trading-001":      {cost:20984.66, waste:1510},
+  "ws-health-analytics-003": {cost:5458.39,  waste:473},
+  "ws-prod-bi-004":          {cost:10133.38, waste:1214},
+  "ws-retail-forecast-002":  {cost:24119.26, waste:11759},
+  "ws-sandbox-ds-005":       {cost:3817.43,  waste:473},
+  "ws-staging-007":          {cost:4207.11,  waste:0},
+  "ws-zombie-008":           {cost:8479.67,  waste:5007},
+};
+
+const ANOMALIES = [
+  {label:"Zombie Cluster",        cost90:5007,  annual:19289, color:'#FF3621'},
+  {label:"GPU Overprov.",         cost90:11759, annual:23845, color:'#FF6B47'},
+  {label:"Serverless Spike",      cost90:1214,  annual:4183,  color:'#FFB347'},
+  {label:"Weekend Waste",         cost90:946,   annual:3645,  color:'#FF8C69'},
+  {label:"DLT Runaway",           cost90:1510,  annual:3673,  color:'#FFA07A'},
+];
+
+/* ── STATE ──────────────────────────────────────────────────────────────── */
+let isExtinguished = false;
+const charts = {};
+
+/* ── COLORS ─────────────────────────────────────────────────────────────── */
+function C(mode) {
+  return mode === 'ext'
+    ? { p:'#00C7B1', s:'#4A9EFF', t:'#21A0FF', grid:'rgba(255,255,255,0.06)' }
+    : { p:'#FF3621', s:'#FF6B47', t:'#FFB347', grid:'rgba(255,255,255,0.06)' };
+}
+
+/* ── CHART DEFAULTS ─────────────────────────────────────────────────────── */
+Chart.defaults.color = 'rgba(255,255,255,0.45)';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size = 11;
+
+function tooltipDefaults(bg='rgba(10,14,20,0.97)') {
+  return {
+    backgroundColor: bg,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    titleColor: 'rgba(255,255,255,0.9)',
+    bodyColor: 'rgba(255,255,255,0.6)',
+    padding: 10,
+    cornerRadius: 8,
+    titleFont: { family:"'DM Mono', monospace", size:11 },
+    bodyFont:  { family:"'DM Sans', sans-serif",  size:12 },
+  };
+}
+
+/* ── CHART 1: BURN TREND ────────────────────────────────────────────────── */
+function initChart1() {
+  const ctx = document.getElementById('chart1').getContext('2d');
+  const labels = DAILY.map(d => d.date.slice(5)); // MM-DD
+  const costs  = DAILY.map(d => d.cost);
+
+  // Baseline (7-day rolling avg)
+  const baseline = costs.map((v,i) => {
+    if (i < 7) return null;
+    return costs.slice(i-7,i).reduce((a,b)=>a+b,0)/7;
+  });
+
+  // Anomaly window annotation (Feb 10–13 spike area)
+  const spikeData = costs.map((v,i) => {
+    const d = DAILY[i].date;
+    return (d >= '2026-02-10' && d <= '2026-02-13') ? v : null;
+  });
+
+  const c = C('burn');
+
+  charts.c1 = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Daily Spend',
+          data: costs,
+          backgroundColor: costs.map((v,i) => {
+            const d = DAILY[i].date;
+            if (d >= '2026-02-10' && d <= '2026-02-13') return 'rgba(255,54,33,0.85)';
+            return 'rgba(255,107,71,0.35)';
+          }),
+          borderColor: costs.map((v,i) => {
+            const d = DAILY[i].date;
+            return (d >= '2026-02-10' && d <= '2026-02-13') ? '#FF3621' : 'rgba(255,107,71,0.6)';
+          }),
+          borderWidth: 1,
+          borderRadius: 2,
+        },
+        {
+          label: '7-Day Avg',
+          data: baseline,
+          type: 'line',
+          borderColor: 'rgba(255,179,71,0.7)',
+          borderWidth: 1.5,
+          borderDash: [4,3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: (ctx) => `  ${ctx.dataset.label}: $${ctx.parsed.y?.toFixed(0) ?? '-'}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            maxTicksLimit: 10,
+            maxRotation: 0,
+            color: 'rgba(255,255,255,0.3)',
+          }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: {
+            callback: v => `$${v}`,
+            color: 'rgba(255,255,255,0.3)',
+          },
+          suggestedMin: 600,
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 2: SKU DONUT ─────────────────────────────────────────────────── */
+function initChart2() {
+  const ctx = document.getElementById('chart2').getContext('2d');
+  const labels = Object.keys(SKU);
+  const data   = Object.values(SKU);
+  const total  = data.reduce((a,b)=>a+b,0);
+
+  charts.c2 = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: ['#FF3621','#FF6B47','#FFB347','#FF8C69'],
+        borderColor: 'rgba(13,17,23,0.8)',
+        borderWidth: 3,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '62%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            boxWidth: 10, boxHeight: 10,
+            padding: 14,
+            font: { size: 11 },
+            color: 'rgba(255,255,255,0.55)',
+          }
+        },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: (ctx) => {
+              const pct = (ctx.parsed / total * 100).toFixed(1);
+              return `  $${ctx.parsed.toLocaleString(undefined,{maximumFractionDigits:0})}  (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 3: GPU SCATTER ───────────────────────────────────────────────── */
+function initChart3() {
+  const ctx = document.getElementById('chart3').getContext('2d');
+
+  const points = GPU_SCATTER.map(d => ({
+    x: d.util,
+    y: d.cost,
+    r: Math.sqrt(d.cost / 40),
+    label: d.ws
+  }));
+
+  const bgColors = GPU_SCATTER.map(d =>
+    d.ws === 'ws-retail-forecast' ? 'rgba(255,54,33,0.8)' : 'rgba(255,107,71,0.4)'
+  );
+
+  charts.c3 = new Chart(ctx, {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        data: points,
+        backgroundColor: bgColors,
+        borderColor: bgColors.map(c => c.replace('0.4','0.8').replace('0.8','1')),
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              return [
+                `  ${d.label}`,
+                `  GPU util: ${d.x.toFixed(1)}%`,
+                `  Cost: $${d.y.toLocaleString(undefined,{maximumFractionDigits:0})}`
+              ];
+            }
+          }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'GPU Utilization %', color: 'rgba(255,255,255,0.3)', font:{size:11} },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          min: 0, max: 100,
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => v + '%' }
+        },
+        y: {
+          title: { display: true, text: '90-Day Cost (USD)', color: 'rgba(255,255,255,0.3)', font:{size:11} },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => '$'+v.toLocaleString() }
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 4: WORKSPACE RISK MATRIX ──────────────────────────────────────── */
+function initChart4() {
+  const ctx = document.getElementById('chart4').getContext('2d');
+
+  const entries = Object.entries(WS_COSTS);
+  const points = entries.map(([k,v]) => ({
+    x: v.cost,
+    y: v.waste,
+    r: Math.max(5, Math.sqrt(v.waste / 15)),
+    label: k.replace('ws-','').replace('-002','').replace('-001','').replace('-003','').replace('-004','').replace('-005','').replace('-006','').replace('-007','').replace('-008',''),
+  }));
+
+  const bgColors = entries.map(([k,v]) =>
+    v.waste > 3000 ? 'rgba(255,54,33,0.75)' :
+    v.waste > 500  ? 'rgba(255,107,71,0.5)' :
+                     'rgba(255,179,71,0.3)'
+  );
+
+  charts.c4 = new Chart(ctx, {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        data: points,
+        backgroundColor: bgColors,
+        borderColor: bgColors.map(c => c.replace('0.75','1').replace('0.5','0.8').replace('0.3','0.6')),
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              const wpct = ctx.raw.y / ctx.raw.x * 100;
+              return [
+                `  ${d.label}`,
+                `  Total: $${d.x.toLocaleString(undefined,{maximumFractionDigits:0})}`,
+                `  Waste: $${d.y.toLocaleString(undefined,{maximumFractionDigits:0})} (${wpct.toFixed(1)}%)`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Total 90-Day Spend ($)', color: 'rgba(255,255,255,0.3)', font:{size:11} },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => '$'+Math.round(v/1000)+'K' }
+        },
+        y: {
+          title: { display: true, text: 'Recoverable Waste ($)', color: 'rgba(255,255,255,0.3)', font:{size:11} },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => '$'+v.toLocaleString() }
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 5: DLT PIPELINE ──────────────────────────────────────────────── */
+function initChart5() {
+  const ctx = document.getElementById('chart5').getContext('2d');
+
+  // Simulate DLT daily costs with idle spikes for weekend/off-hours
+  const dltLabels = DAILY.map(d => d.date.slice(5));
+  const dltCosts  = DAILY.map((d,i) => {
+    const dow = new Date(d.date).getDay();
+    const base = 16.5;
+    // Weekends: slight variation but continuous mode keeps running
+    const noise = (Math.sin(i * 1.7) * 2.1) + (Math.cos(i * 0.9) * 1.4);
+    // Business hours spike: slightly higher Mon-Fri
+    const biz = (dow >= 1 && dow <= 5) ? 2.5 : 0;
+    return Math.max(8, base + noise + biz);
+  });
+
+  // Post-remediation: triggered mode — only runs business hours
+  const triggeredCosts = DAILY.map((d,i) => {
+    const dow = new Date(d.date).getDay();
+    if (dow === 0 || dow === 6) return 0;
+    const base = 6.2;
+    const noise = Math.abs(Math.sin(i * 2.1)) * 1.8;
+    return base + noise;
+  });
+
+  charts.c5 = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dltLabels,
+      datasets: [
+        {
+          label: 'CONTINUOUS (current)',
+          data: dltCosts,
+          borderColor: '#FF3621',
+          backgroundColor: 'rgba(255,54,33,0.08)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.4,
+        },
+        {
+          label: 'TRIGGERED (projected)',
+          data: triggeredCosts,
+          borderColor: 'rgba(0,199,177,0.6)',
+          backgroundColor: 'rgba(0,199,177,0.04)',
+          borderWidth: 1.5,
+          borderDash: [5,3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: { boxWidth: 10, boxHeight: 2, padding: 12, color: 'rgba(255,255,255,0.45)', font:{size:11} }
+        },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: ctx => `  ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { maxTicksLimit: 8, color: 'rgba(255,255,255,0.3)', maxRotation: 0 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => `$${v.toFixed(0)}` },
+          title: { display: true, text: 'Daily Cost ($)', color: 'rgba(255,255,255,0.25)', font:{size:10} }
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 6: ROI TIMELINE ──────────────────────────────────────────────── */
+function initChart6() {
+  const ctx = document.getElementById('chart6').getContext('2d');
+
+  const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+  const unlocked   = [23472, 3645, 27518, 0]; // per-week savings unlocked
+  const cumulative = unlocked.reduce((acc,v,i) => {
+    acc.push((acc[i-1] || 0) + v);
+    return acc;
+  }, []);
+
+  charts.c6 = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weekLabels,
+      datasets: [
+        {
+          label: 'Savings Unlocked',
+          data: unlocked,
+          backgroundColor: ['rgba(0,199,177,0.7)','rgba(0,199,177,0.5)','rgba(0,199,177,0.85)','rgba(0,199,177,0.2)'],
+          borderColor: '#00C7B1',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Cumulative Savings',
+          data: cumulative,
+          type: 'line',
+          borderColor: '#4A9EFF',
+          borderWidth: 2,
+          pointBackgroundColor: '#4A9EFF',
+          pointRadius: 5,
+          fill: false,
+          tension: 0.3,
+          yAxisID: 'y2',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: { boxWidth: 10, boxHeight: 2, padding: 12, color: 'rgba(255,255,255,0.45)', font:{size:11} }
+        },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: ctx => `  ${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: 'rgba(255,255,255,0.4)' }
+        },
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => '$'+v.toLocaleString() },
+          title: { display: true, text: 'Weekly ($)', color: 'rgba(255,255,255,0.25)', font:{size:10} }
+        },
+        y2: {
+          position: 'right',
+          grid: { display: false },
+          ticks: { color: 'rgba(74,158,255,0.5)', callback: v => '$'+Math.round(v/1000)+'K' },
+          title: { display: true, text: 'Cumulative ($)', color: 'rgba(74,158,255,0.35)', font:{size:10} }
+        }
+      }
+    }
+  });
+}
+
+/* ── CHART 7: ANOMALY BAR ───────────────────────────────────────────────── */
+function initChart7() {
+  const ctx = document.getElementById('chart7').getContext('2d');
+
+  charts.c7 = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ANOMALIES.map(a => a.label),
+      datasets: [
+        {
+          label: '90-Day Cost',
+          data: ANOMALIES.map(a => a.cost90),
+          backgroundColor: ANOMALIES.map(a => a.color + 'CC'),
+          borderColor: ANOMALIES.map(a => a.color),
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Annual Projection',
+          data: ANOMALIES.map(a => a.annual),
+          backgroundColor: 'rgba(255,255,255,0.06)',
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1,
+          borderRadius: 4,
+          borderDash: [],
+          yAxisID: 'y',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: { boxWidth: 10, boxHeight: 2, padding: 12, color:'rgba(255,255,255,0.45)', font:{size:11} }
+        },
+        tooltip: {
+          ...tooltipDefaults(),
+          callbacks: {
+            label: ctx => `  ${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: 'rgba(255,255,255,0.4)', font:{size:11} }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: 'rgba(255,255,255,0.3)', callback: v => '$'+v.toLocaleString() }
+        }
+      }
+    }
+  });
+}
+
+/* ── STATE TOGGLE ───────────────────────────────────────────────────────── */
+function toggleState() {
+  isExtinguished = !isExtinguished;
+  const html = document.documentElement;
+  const dot  = document.getElementById('toggleDot');
+
+  // Phase 1: background + title transition
+  if (isExtinguished) {
+    html.classList.add('extinguished');
+    dot.textContent = '✦';
+  } else {
+    html.classList.remove('extinguished');
+    dot.textContent = '🔥';
+  }
+
+  // Phase 2: KPI counter animation
+  setTimeout(() => animateKPIs(isExtinguished), 400);
+
+  // Phase 3: chart redraws
+  setTimeout(() => updateCharts(isExtinguished), 600);
+}
+
+function animateKPIs(ext) {
+  const kpis = [
+    { id:'kpi1', burn:'$13,472', ext:'$1,021'  },
+    { id:'kpi2', burn:'$56,580', ext:'$54,635' },
+    { id:'kpi3', burn:'15.5%',   ext:'1.1%'    },
+    { id:'kpi4', burn:'8 hrs',   ext:'$54,635' },
+  ];
+  const subs = [
+    { id:'kpi1-sub', burn:'90-day recoverable',    ext:'residual after fixes'   },
+    { id:'kpi2-sub', burn:'at current trajectory', ext:'annual savings realized' },
+    { id:'kpi3-sub', burn:'of total platform spend', ext:'waste rate post-fix'  },
+    { id:'kpi4-sub', burn:'implementation effort', ext:'net annual savings'      },
+  ];
+  kpis.forEach(k => {
+    const el = document.getElementById(k.id);
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(6px)';
+    el.style.transition = 'opacity 0.3s, transform 0.3s';
+    setTimeout(() => {
+      el.textContent = ext ? k.ext : k.burn;
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    }, 200);
+  });
+  subs.forEach(s => {
+    const el = document.getElementById(s.id);
+    setTimeout(() => { el.textContent = ext ? s.ext : s.burn; }, 200);
+  });
+}
+
+function updateCharts(ext) {
+  const c = C(ext ? 'ext' : 'burn');
+
+  // Chart 1: burn trend — flatten anomaly in extinguished mode
+  if (charts.c1) {
+    charts.c1.data.datasets[0].backgroundColor = DAILY.map((d,i) => {
+      if (ext) return 'rgba(0,199,177,0.35)';
+      const dd = d.date;
+      if (dd >= '2026-02-10' && dd <= '2026-02-13') return 'rgba(255,54,33,0.85)';
+      return 'rgba(255,107,71,0.35)';
+    });
+    charts.c1.data.datasets[0].borderColor = DAILY.map((d,i) => {
+      if (ext) return 'rgba(0,199,177,0.6)';
+      const dd = d.date;
+      return (dd >= '2026-02-10' && dd <= '2026-02-13') ? '#FF3621' : 'rgba(255,107,71,0.6)';
+    });
+    // Flatten spike in extinguished — replace with avg
+    const baseCost = 980;
+    charts.c1.data.datasets[0].data = DAILY.map((d,i) => {
+      if (!ext) return d.cost;
+      const dd = d.date;
+      if (dd >= '2026-02-10' && dd <= '2026-02-13') return baseCost + Math.random()*50;
+      return d.cost * 0.85; // ~15% lower post-remediation
+    });
+    charts.c1.data.datasets[1].borderColor = ext ? 'rgba(74,158,255,0.6)' : 'rgba(255,179,71,0.7)';
+    charts.c1.update('active');
+  }
+
+  // Chart 2: SKU donut — update colors
+  if (charts.c2) {
+    charts.c2.data.datasets[0].backgroundColor = ext
+      ? ['#00C7B1','#4A9EFF','#21A0FF','#67E8F9']
+      : ['#FF3621','#FF6B47','#FFB347','#FF8C69'];
+    charts.c2.update('active');
+  }
+
+  // Chart 3: GPU scatter — highlight changes
+  if (charts.c3) {
+    charts.c3.data.datasets[0].backgroundColor = GPU_SCATTER.map(d =>
+      ext
+        ? (d.ws === 'ws-retail-forecast' ? 'rgba(0,199,177,0.7)' : 'rgba(0,199,177,0.4)')
+        : (d.ws === 'ws-retail-forecast' ? 'rgba(255,54,33,0.8)'  : 'rgba(255,107,71,0.4)')
+    );
+    // In extinguished: fix the retail-forecast utilization
+    charts.c3.data.datasets[0].data = GPU_SCATTER.map(d => ({
+      x: ext && d.ws === 'ws-retail-forecast' ? 71.5 : d.util,
+      y: ext && d.ws === 'ws-retail-forecast' ? d.cost * 0.5 : d.cost,
+      r: Math.sqrt((ext && d.ws === 'ws-retail-forecast' ? d.cost*0.5 : d.cost) / 40),
+      label: d.ws
+    }));
+    charts.c3.update('active');
+  }
+
+  // Chart 4: risk matrix — update colors
+  if (charts.c4) {
+    const entries = Object.entries(WS_COSTS);
+    charts.c4.data.datasets[0].backgroundColor = entries.map(([k,v]) => {
+      if (ext) return v.waste > 3000 ? 'rgba(0,199,177,0.7)' : 'rgba(0,199,177,0.35)';
+      return v.waste > 3000 ? 'rgba(255,54,33,0.75)' : v.waste > 500 ? 'rgba(255,107,71,0.5)' : 'rgba(255,179,71,0.3)';
+    });
+    charts.c4.data.datasets[0].data = entries.map(([k,v]) => ({
+      x: v.cost,
+      y: ext ? v.waste * 0.05 : v.waste,
+      r: Math.max(5, Math.sqrt((ext ? v.waste*0.05 : v.waste) / 15) + (ext?1:0)),
+      label: k
+    }));
+    charts.c4.update('active');
+  }
+
+  // Chart 7: anomaly bars
+  if (charts.c7) {
+    charts.c7.data.datasets[0].backgroundColor = ext
+      ? ANOMALIES.map(() => 'rgba(0,199,177,0.5)')
+      : ANOMALIES.map(a => a.color + 'CC');
+    charts.c7.data.datasets[0].borderColor = ext
+      ? ANOMALIES.map(() => '#00C7B1')
+      : ANOMALIES.map(a => a.color);
+    charts.c7.data.datasets[0].data = ext
+      ? ANOMALIES.map(a => Math.round(a.cost90 * 0.05))
+      : ANOMALIES.map(a => a.cost90);
+    charts.c7.update('active');
+  }
+}
+
+/* ── INIT ───────────────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+  initChart1();
+  initChart2();
+  initChart3();
+  initChart4();
+  initChart5();
+  initChart6();
+  initChart7();
+});
+</script>
+</body>
+</html>
