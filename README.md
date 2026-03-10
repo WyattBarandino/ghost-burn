@@ -2,7 +2,7 @@
 
 **Uncovering Invisible DBU Waste in Databricks Lakehouse Environments**
 
-A FinOps audit framework that recovers $54,635 in annualized Databricks spend across 8 simulated workspaces — and ships every fix as a copy-paste ready policy config or SQL query.
+A FinOps audit framework that recovers $54,635 in annualized Databricks spend across 8 simulated workspaces and ships every fix as a copy-paste ready policy config or SQL query.
 
 [**→ View Dashboard**](https://wyattbarandino.github.io/ghost-burn/) · [**LinkedIn**](https://linkedin.com/in/wyattbarandino)
 
